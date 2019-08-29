@@ -755,7 +755,7 @@ class InstaBot:
         #Run for random interval
         newRunTime = random.randrange(0, self.run_time)
         t_end = time.time() + newRunTime
-        self.logger.info("Script will run again for %s minutes" % newRunTime / 60)
+        self.logger.info("Script will run again for %s minutes" % (newRunTime / 60))
 
         while self.prog_run and self.login_status:
 
@@ -790,7 +790,7 @@ class InstaBot:
                     #Run for another random interval
                     newRunTime = random.randrange(0, self.run_time)
                     t_end = time.time() + newRunTime
-                    self.logger.info("Script will run again for %s minutes" % newRunTime/60)
+                    self.logger.info("Script will run again for %s minutes" % (newRunTime/60))
 
             except Exception as e:
                 print("Error: Exception [{0}]".format(e))
