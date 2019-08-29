@@ -22,6 +22,8 @@ import instabot_py
 from instabot_py.default_config import DEFAULT_CONFIG
 from instabot_py.persistence.manager import PersistenceManager
 
+from google.cloud import language
+
 
 class CredsMissing(Exception):
     """ Raised when the Instagram credentials are missing"""
@@ -83,6 +85,7 @@ class InstaBot:
         self.tag_blacklist = self.config.get("tag_blacklist")
         self.unfollow_whitelist = self.config.get("unfollow_whitelist")
         self.comment_list = self.config.get("comment_list")
+        self.language_client = language.LanguageServiceClient()
 
         self.instaloader = instaloader.Instaloader()
 
@@ -97,6 +100,9 @@ class InstaBot:
         )
         self.unfollow_selebgram = self.str2bool(self.config.get("unfollow_selebgram"))
         self.unfollow_everyone = self.str2bool(self.config.get("unfollow_everyone"))
+        self.disable_comments = self.str2bool(self.config.get("disable_comments"))
+        self.sleep_time = int(self.config.get("sleep_time_minutes_max")) * 60
+        self.run_time = int(self.config.get("run_time_minutes_max")) * 60
 
         self.time_in_day = 24 * 60 * 60
         # Like
@@ -583,7 +589,7 @@ class InstaBot:
         media_to_like_url = self.get_media_url(media_id)
 
         try:
-            self.logger.debug(f"Trying to like media: id: {media_id}, url: {media_to_like_url}")
+            #self.logger.debug(f"Trying to like media: id: {media_id}, url: {media_to_like_url}")
             resp = self.s.post(self.url_likes % (media_id))
         except Exception as exc:
             logging.exception(exc)
@@ -641,18 +647,24 @@ class InstaBot:
 
     def comment(self, media_id, comment_text):
         """ Send http request to comment """
-        self.logger.info(f"Trying to comment: {media_id} {self.get_media_url(media_id)}")
-        url_comment = self.url_comment % (media_id)
-        try:
-            resp = self.s.post(url_comment, data={"comment_text": comment_text})
-        except Exception as exc:
-            logging.exception(exc)
-            return False
-
-        if resp.status_code == 200:
+        if self.disable_comments is True:
+            self.logger.info(f"Generated comment: {comment_text} {self.get_media_url(media_id)}")
+            self.logger.info("Comment not posted as configuration disables commenting (collecting sentiment data).")
             self.comments_counter += 1
-            self.logger.info(f"Comment: {comment_text}. #{self.comments_counter}.")
             return True
+        else:
+            self.logger.info(f"Trying to comment: {media_id} {self.get_media_url(media_id)}")
+            url_comment = self.url_comment % (media_id)
+            try:
+                resp = self.s.post(url_comment, data={"comment_text": comment_text})
+            except Exception as exc:
+                logging.exception(exc)
+                return False
+
+            if resp.status_code == 200:
+                self.comments_counter += 1
+                self.logger.info(f"Comment: {comment_text}. #{self.comments_counter}.")
+                return True
 
     def follow(self, user_id, username=None):
         """ Send http request to follow """
@@ -739,27 +751,49 @@ class InstaBot:
 
     def mainloop(self):
         medias = []
+        random.seed()
+        #Run for random interval
+        newRunTime = random.randrange(0, self.run_time)
+        t_end = time.time() + newRunTime
+        self.logger.info("Script will run again for %s minutes" % newRunTime / 60)
+
         while self.prog_run and self.login_status:
-            if not self.run_during_time_window():
-                continue
-            if not self.loop_controller():
-                continue
 
-            if len(medias) == 0:
-                tag = random.choice(self.tag_list)
-                medias_raw = self.get_media_id_by_tag(tag)
-                self.logger.debug(f"Retrieved {len(medias_raw)} medias")
-                max_tag_like_count = random.randint(1, self.max_like_for_one_tag)
-                medias = self.remove_already_liked_medias(medias_raw)[:max_tag_like_count]
-                self.logger.debug(f"Select {max_tag_like_count} medias to process. Increase max_like_for_one_tag value for more processing medias ")
-                continue
+            try:
+                if not self.run_during_time_window():
+                    continue
+                if not self.loop_controller():
+                    continue
 
-            media = medias.pop()
-            self.new_auto_mod_like(media)
-            self.new_auto_mod_unlike()
-            self.new_auto_mod_follow(media)
-            self.new_auto_mod_unfollow()
-            self.new_auto_mod_comments(media)
+                if len(medias) == 0:
+                    tag = random.choice(self.tag_list)
+                    medias_raw = self.get_media_id_by_tag(tag)
+                    self.logger.debug(f"Retrieved {len(medias_raw)} medias")
+                    max_tag_like_count = random.randint(1, self.max_like_for_one_tag)
+                    medias = self.remove_already_liked_medias(medias_raw)[:max_tag_like_count]
+                    self.logger.debug(f"Select {max_tag_like_count} medias to process. Increase max_like_for_one_tag value for more processing medias ")
+                    continue
+
+                media = medias.pop()
+                self.new_auto_mod_like(media)
+                self.new_auto_mod_unlike()
+                self.new_auto_mod_follow(media)
+                self.new_auto_mod_unfollow()
+                self.new_auto_mod_comments(media)
+
+                #Check if sleepInterval has passed, if so sleep for random time interval between hour
+                if (time.time() > t_end):
+                    sleep_time = random.randrange(0, self.sleep_time)
+                    sleep_minutes = sleep_time/60
+                    self.logger.info("Script will sleep for %s minutes." % sleep_minutes)
+                    time.sleep(sleep_time)
+                    #Run for another random interval
+                    newRunTime = random.randrange(0, self.run_time)
+                    t_end = time.time() + newRunTime
+                    self.logger.info("Script will run again for %s minutes" % newRunTime/60)
+
+            except Exception as e:
+                print("Error: Exception [{0}]".format(e))
 
         self.logger.info("Exit from loop GoodBye")
 
@@ -1099,6 +1133,17 @@ class InstaBot:
                     self.logger.debug("Media is already commented")
                     return False
 
+            #Check sentiment, if negative, then don't comment
+            if len(media["node"]["edge_media_to_caption"]["edges"]) > 0:
+                caption = media["node"]["edge_media_to_caption"]["edges"][0]["node"]["text"].encode(
+                    "ascii", errors="ignore")
+                sentiment = self.get_sentiment(caption)
+                if sentiment < 0:
+                    self.logger.debug("Skipping comment, the caption has negative sentiment: " + str(caption))
+                    return False
+                else:
+                    self.logger.debug("The caption: " + str(caption) + " has sentiment: %s" % sentiment)
+
             return True
         elif resp.status_code == 404:
             self.logger.warning(f"{media_code} doesn't exist (404).")
@@ -1118,6 +1163,26 @@ class InstaBot:
             logging.exception(exc)
             media_on_feed = []
         return media_on_feed
+
+    def get_sentiment(self, text):
+        """Extracts a sentiment score [-1, 1] from text."""
+
+        if not text:
+            self.logger.debug("No sentiment for empty text.")
+            return 0
+
+        document = language.types.Document(
+            content=text,
+            type=language.enums.Document.Type.PLAIN_TEXT,
+            language="en")
+        sentiment = self.language_client.analyze_sentiment(
+            document).document_sentiment
+
+        #self.logger.debug(
+        #    "Sentiment score and magnitude for text: %s %s \"%s\"" %
+        #    (sentiment.score, sentiment.magnitude, text))
+
+        return sentiment.score
 
     @staticmethod
     def time_dist(to_time, from_time):
