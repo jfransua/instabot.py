@@ -103,6 +103,8 @@ class InstaBot:
         self.disable_comments = self.str2bool(self.config.get("disable_comments"))
         self.sleep_time = int(self.config.get("sleep_time_minutes_max")) * 60
         self.run_time = int(self.config.get("run_time_minutes_max")) * 60
+        self.sleep_time_min = int(self.config.get("sleep_time_minutes_min")) * 60
+
 
         self.time_in_day = 24 * 60 * 60
         # Like
@@ -753,7 +755,7 @@ class InstaBot:
         medias = []
         random.seed()
         #Run for random interval
-        newRunTime = random.randrange(0, self.run_time)
+        newRunTime = random.randrange(self.sleep_time_min, self.run_time)
         t_end = time.time() + newRunTime
         self.logger.info("Script will run again for %s minutes" % (newRunTime / 60))
 
@@ -783,12 +785,12 @@ class InstaBot:
 
                 #Check if sleepInterval has passed, if so sleep for random time interval between hour
                 if (time.time() > t_end):
-                    sleep_time = random.randrange(0, self.sleep_time)
+                    sleep_time = random.randrange(self.sleep_time_min, self.sleep_time)
                     sleep_minutes = sleep_time/60
                     self.logger.info("Script will sleep for %s minutes." % sleep_minutes)
                     time.sleep(sleep_time)
                     #Run for another random interval
-                    newRunTime = random.randrange(0, self.run_time)
+                    newRunTime = random.randrange(self.sleep_time_min, self.run_time)
                     t_end = time.time() + newRunTime
                     self.logger.info("Script will run again for %s minutes" % (newRunTime/60))
 

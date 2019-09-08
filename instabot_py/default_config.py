@@ -38,6 +38,7 @@ DEFAULT_CONFIG = {
     "unfollow_not_following": True,
     "unfollow_break_max": 30,
     "comments_per_day": 0,
+    "sleep_time_minutes_min": 5,
     "sleep_time_minutes_max": 60,
     "run_time_minutes_max": 120,
     "disable_comments" : False,
