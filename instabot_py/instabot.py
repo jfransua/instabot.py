@@ -32,6 +32,13 @@ class CredsMissing(Exception):
     def __str__(self):
         return CredsMissing.message
 
+class LikesBlocked(Exception):
+    """ Raised when the Instagram blocks action"""
+    message = "Instagram blocked action likes."
+
+    def __str__(self):
+        return LikesBlocked.message
+
 
 class InstaBot:
     """
@@ -53,6 +60,7 @@ class InstaBot:
     url_media = "https://www.instagram.com/p/%s/"
     url_user_detail = "https://www.instagram.com/%s/"
     api_user_detail = "https://i.instagram.com/api/v1/users/%s/info/"
+    url_report_like_problem = "https://www.instagram.com/repute/report_problem/instagram_like_add/"
 
     def __init__(self, config=None, **kwargs):
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -609,7 +617,11 @@ class InstaBot:
             self.logger.info(f"Could not like media: id: {media_id}, "
                              f"url: {media_to_like_url}. Reason: {resp.text}")
             self.persistence.insert_media(media_id=media_id, status="400", )
-
+            if "action was blocked" in resp.text:
+                self.logger.debug("Account has been blocked, reporting problem and exiting...")
+                report_resp = self.s.post(self.url_report_like_problem)
+                self.logger.debug(f"Report response code: {report_resp.status_code}")
+                raise LikesBlocked()
         else:
             self.persistence.insert_media(
                 media_id=media_id,
@@ -794,6 +806,9 @@ class InstaBot:
                     t_end = time.time() + newRunTime
                     self.logger.info("Script will run again for %s minutes" % (newRunTime/60))
 
+            except LikesBlocked as e:
+                print("Account is blocked, exiting... [{0}]".format(e))
+                return
             except Exception as e:
                 print("Error: Exception [{0}]".format(e))
 
