@@ -1130,36 +1130,43 @@ class InstaBot:
 
         if resp.status_code == 200:
             raw_data = re.search("window._sharedData = (.*?);", resp.text, re.DOTALL).group(1)
+            #self.logger.debug("raw_data" + str(raw_data))
+
             all_data = json.loads(raw_data)["entry_data"]["PostPage"][0]
+            #self.logger.debug("all_data" + str(all_data))
 
-            if all_data["graphql"]["shortcode_media"]["owner"]["id"] == self.user_id:
-                self.logger.debug("This media is yours.")
-                return False
-            try:
-                edges = all_data["graphql"]["shortcode_media"].get("edge_media_to_comment", None)
-                if not edges:
-                    edges = all_data["graphql"]["shortcode_media"].get("edge_media_to_parent_comment", None)
-
-                comments = list(edges["edges"])
-            except Exception as exc:
-                self.logger.critical("Cannot retrieve comments from media. ")
-                self.logger.exception(exc)
-
-            for comment in comments:
-                if comment["node"]["owner"]["id"] == self.user_id:
-                    self.logger.debug("Media is already commented")
+            if "graphql" in all_data:
+                if all_data["graphql"]["shortcode_media"]["owner"]["id"] == self.user_id:
+                    self.logger.debug("This media is yours.")
                     return False
+                try:
+                    edges = all_data["graphql"]["shortcode_media"].get("edge_media_to_comment", None)
+                    if not edges:
+                        edges = all_data["graphql"]["shortcode_media"].get("edge_media_to_parent_comment", None)
 
-            #Check sentiment, if negative, then don't comment
-            if len(media["node"]["edge_media_to_caption"]["edges"]) > 0:
-                caption = media["node"]["edge_media_to_caption"]["edges"][0]["node"]["text"].encode(
-                    "ascii", errors="ignore")
-                sentiment = self.get_sentiment(caption)
-                if sentiment < 0:
-                    self.logger.debug("Skipping comment, the caption has negative sentiment: " + str(caption))
-                    return False
-                else:
-                    self.logger.debug("The caption: " + str(caption) + " has sentiment: %s" % sentiment)
+                    comments = list(edges["edges"])
+                except Exception as exc:
+                    self.logger.critical("Cannot retrieve comments from media. ")
+                    self.logger.exception(exc)
+
+                for comment in comments:
+                    if comment["node"]["owner"]["id"] == self.user_id:
+                        self.logger.debug("Media is already commented")
+                        return False
+
+                #Check sentiment, if negative, then don't comment
+                if len(media["node"]["edge_media_to_caption"]["edges"]) > 0:
+                    caption = media["node"]["edge_media_to_caption"]["edges"][0]["node"]["text"].encode(
+                        "ascii", errors="ignore")
+                    sentiment = self.get_sentiment(caption)
+                    if sentiment < 0:
+                        self.logger.debug("Skipping comment, the caption has negative sentiment: " + str(caption))
+                        return False
+                    else:
+                        self.logger.debug("The caption: " + str(caption) + " has sentiment: %s" % sentiment)
+            else:
+                self.logger.debug("all_data is empty, leaving comment section.")
+                return True
 
             return True
         elif resp.status_code == 404:
